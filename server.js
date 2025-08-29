@@ -210,3 +210,23 @@ app.listen(PORT, () => {
   console.log('- DB_USER:', process.env.DB_USER || 'postgres');
   console.log('- DB_PASSWORD:', process.env.DB_PASSWORD);
 });
+
+app.post("/api/feedback", async (req, res) => {
+  try {
+    const { product, stockStatus, value } = req.body;
+    console.log('Received feedback:', req.body);    
+    // Here you would typically store the feedback in a database
+    // For this example, we'll just log it and return a success response
+    res.json({
+      success: true,
+      message: 'Feedback received successfully',
+      feedback: { product, stockStatus, value }
+    });
+  } catch (err) {
+    console.error('Feedback submission error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
