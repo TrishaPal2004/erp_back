@@ -16,6 +16,7 @@ const defaultPool = new Pool({
   user: process.env.DB_USER ,
   password: process.env.DB_PASSWORD ,
   database: process.env.DB_DATABASE ,
+  ssl: process.env.DB_SSL === 'true' // Optional SSL
 });
 
 // Function to create a pool with custom config
