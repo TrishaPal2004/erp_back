@@ -288,3 +288,32 @@ app.post("/api/feedback", async (req, res) => {
     client.release();
   }
 });
+
+
+app.get("/api/export-baseline", async (req, res) => {
+  const client = await defaultPool.connect();
+  try {
+    const result = await client.query("SELECT * FROM baseline_forecast");
+
+    // Convert to CSV
+    const headers = Object.keys(result.rows[0]).join(",") + "\n";
+    const rows = result.rows
+      .map((row) =>
+        Object.values(row)
+          .map((val) => `"${val}"`)
+          .join(",")
+      )
+      .join("\n");
+
+    const csvData = headers + rows;
+
+    res.header("Content-Type", "text/csv");
+    res.attachment("baseline_forecast_export.csv");
+    res.send(csvData);
+  } catch (err) {
+    console.error("❌ CSV Export Error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
