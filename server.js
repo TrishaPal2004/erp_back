@@ -210,15 +210,9 @@ app.listen(PORT, () => {
   console.log('- DB_PASSWORD:', process.env.DB_PASSWORD);
 });
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-// This will work locally AND on Render
-const feedbackFile = path.join(__dirname, "Dataset", "baseline_forecast.csv");
 app.post("/api/feedback", async (req, res) => {
+  const client = await defaultPool.connect();
   try {
     const {
       cheeseDemand,
@@ -235,9 +229,15 @@ app.post("/api/feedback", async (req, res) => {
     console.log("📩 Received feedback:", req.body);
 
     let naive_forecast = 0;
-    let festival_adjusted_forecast = 0;
     let sku = "";
-    let currentWeek = Math.ceil((((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 86400000) + new Date(new Date().getFullYear(), 0, 1).getDay() + 1) / 7);
+    const week = Math.ceil(
+      (((new Date() - new Date(new Date().getFullYear(), 0, 1)) /
+        86400000) +
+        new Date(new Date().getFullYear(), 0, 1).getDay() +
+        1) /
+        7
+    );
+
     // Map product → sku & naive_forecast
     if (product === "Cheese") {
       naive_forecast = cheeseDemand;
@@ -255,48 +255,35 @@ app.post("/api/feedback", async (req, res) => {
       naive_forecast = frozenDemand;
       sku = "SKU005_Frozen";
     }
+    naive_forecast = Number(naive_forecast) ;
+    // Adjust forecast
+    const numericValue = Number(value) || 0;
+    const festival_adjusted_forecast =
+      stockStatus === "Overstock"
+        ? naive_forecast - numericValue
+        : stockStatus === "Understock"
+        ? naive_forecast + numericValue
+        : naive_forecast;
 
-    // Adjust forecast based on stock status
-    if (stockStatus === "Overstock") {
-      festival_adjusted_forecast = naive_forecast - value;
-    } else if (stockStatus === "Understock") {
-      festival_adjusted_forecast = naive_forecast + value;
-    } else {
-      festival_adjusted_forecast = naive_forecast;
-    }
+    const actual = naive_forecast + numericValue;
 
-    const actual = naive_forecast + value;
-
-    // Prepare CSV row AFTER calculations
-    const row = [
-      currentWeek,
-      sku,
-      dc,
-      naive_forecast,
-      festival_adjusted_forecast,
-      actual,
-    ].join(",") + "\n";
-
-    // If file doesn’t exist, write header first
-    if (!fs.existsSync(feedbackFile)) {
-      const header =
-        "currentWeek,sku,dc,naive_forecast,festival_adjusted_forecast,actual\n";
-      fs.writeFileSync(feedbackFile, header);
-    }
-
-    // Append row
-    fs.appendFileSync(feedbackFile, row);
+    // Insert into PostgreSQL
+    await client.query(
+      `INSERT INTO feedback 
+      (week, sku, dc, naive_forecast, festival_adjusted_forecast, actual)
+      VALUES ($1, $2, $3, $4, $5, $6)`,
+      [week, sku, dc, naive_forecast, festival_adjusted_forecast, actual]
+    );
 
     res.json({
       success: true,
-      message: "Feedback saved to CSV",
-      feedback: req.body,
+      message: "Feedback saved to database",
+      feedback: { week, sku, dc, naive_forecast, festival_adjusted_forecast, actual },
     });
   } catch (err) {
     console.error("❌ Feedback submission error:", err.message);
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-    });
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
   }
 });
