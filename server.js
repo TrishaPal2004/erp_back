@@ -1,8 +1,7 @@
-const express = require('express');
-const cors = require('cors');
-const pkg = require('pg');
-const dotenv = require('dotenv');
-
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+import dotenv from "dotenv";
 dotenv.config();
 const { Pool } = pkg;
 
@@ -12,11 +11,11 @@ app.use(express.json());
 
 // Default pool using environment variables
 const defaultPool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'Tri@2004',
-  database: process.env.DB_DATABASE || 'demand_forecast',
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT ,
+  user: process.env.DB_USER ,
+  password: process.env.DB_PASSWORD ,
+  database: process.env.DB_DATABASE ,
 });
 
 // Function to create a pool with custom config
