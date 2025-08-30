@@ -127,7 +127,7 @@ app.post("/api/schema", async (req, res) => {
         column_name, 
         data_type,
         is_nullable
-      FROM information_schema.columns 
+      FROM demand_forecast.information_schema.columns
       WHERE table_schema = 'public'
       ORDER BY table_name, ordinal_position
     `);
@@ -270,7 +270,7 @@ app.post("/api/feedback", async (req, res) => {
 
     // Insert into PostgreSQL
     await client.query(
-      `INSERT INTO feedback 
+      `INSERT INTO baseline_forecast
       (week, sku, dc, naive_forecast, festival_adjusted_forecast, actual)
       VALUES ($1, $2, $3, $4, $5, $6)`,
       [week, sku, dc, naive_forecast, festival_adjusted_forecast, actual]
