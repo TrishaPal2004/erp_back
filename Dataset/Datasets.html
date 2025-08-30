@@ -1,0 +1,440 @@
+import React, { useState, useEffect } from 'react';
+import { Download, Play, BarChart3, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+
+const FreshBitesDataGenerator = () => {
+  const [generatedData, setGeneratedData] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedChart, setSelectedChart] = useState('demand');
+
+  // Configuration
+  const config = {
+    skus: ['SKU001_Snacks', 'SKU002_Beverages', 'SKU003_Dairy', 'SKU004_Bakery', 'SKU005_Frozen'],
+    dcs: ['Mumbai', 'Kolkata'],
+    suppliers: ['SUP001', 'SUP002', 'SUP003', 'SUP004', 'SUP005'],
+    weeks: 104, // 2 years
+    festivalWeeks: [8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96], // 12 festivals per year
+    plantCapacity: 10000
+  };
+
+  const generateData = () => {
+    setIsGenerating(true);
+    
+    // Generate base demand patterns
+    const generateBaseDemand = (week, sku) => {
+      const skuMultipliers = {
+        'SKU001_Snacks': 1.2,
+        'SKU002_Beverages': 1.0,
+        'SKU003_Dairy': 0.8,
+        'SKU004_Bakery': 1.1,
+        'SKU005_Frozen': 0.9
+      };
+      
+      const seasonality = 1 + 0.3 * Math.sin((week * 2 * Math.PI) / 52); // Annual seasonality
+      const weeklyPattern = 1 + 0.1 * Math.sin((week * 2 * Math.PI) / 4); // Monthly pattern
+      const baseDemand = 500 * skuMultipliers[sku] * seasonality * weeklyPattern;
+      
+      return Math.max(50, baseDemand + (Math.random() - 0.5) * 100);
+    };
+
+    // Generate forecast data
+    const forecastData = [];
+    for (let week = 1; week <= config.weeks; week++) {
+      for (const sku of config.skus) {
+        for (const dc of config.dcs) {
+          const baseDemand = generateBaseDemand(week, sku);
+          const isFestival = config.festivalWeeks.includes(week);
+          const festivalUplift = isFestival ? (0.4 + Math.random() * 0.1) : 0; // 40-50% uplift
+          
+          const forecastQty = Math.round(baseDemand * (1 + festivalUplift));
+          
+          forecastData.push({
+            week,
+            sku,
+            dc,
+            forecast_qty: forecastQty,
+            festival_flag: isFestival ? 1 : 0
+          });
+        }
+      }
+    }
+
+    // Generate actuals data (forecast ± noise, higher variance on festival weeks)
+    const actualsData = forecastData.map(forecast => {
+      const variance = forecast.festival_flag ? 0.3 : 0.15; // Higher variance on festival weeks
+      const noise = (Math.random() - 0.5) * 2 * variance;
+      const actualQty = Math.round(Math.max(0, forecast.forecast_qty * (1 + noise)));
+      
+      return {
+        week: forecast.week,
+        sku: forecast.sku,
+        dc: forecast.dc,
+        actual_qty: actualQty
+      };
+    });
+
+    // Generate inventory data (week 0 starting inventory)
+    const inventoryData = [];
+    for (const sku of config.skus) {
+      const plantOnhand = Math.round(1000 + Math.random() * 2000);
+      const mumbaiOnhand = Math.round(300 + Math.random() * 700);
+      const kolkataOnhand = Math.round(500 + Math.random() * 1000); // Kolkata tends to have more stock
+      
+      inventoryData.push({
+        week0: 0,
+        sku,
+        plant_onhand: plantOnhand,
+        mumbai_onhand: mumbaiOnhand,
+        kolkata_onhand: kolkataOnhand
+      });
+    }
+
+    // Generate capacity data
+    const capacityData = [];
+    for (let week = 1; week <= config.weeks; week++) {
+      const capacity = Math.round(config.plantCapacity * (0.9 + Math.random() * 0.2)); // 90-110% of base capacity
+      capacityData.push({
+        week,
+        plant_capacity_units: capacity
+      });
+    }
+
+    // Generate suppliers data
+    const suppliersData = config.suppliers.map((supplierId, index) => {
+      const sku = config.skus[index]; // Each supplier maps to one SKU primarily
+      return {
+        supplier_id: supplierId,
+        sku,
+        avg_lead_time_wk: 2 + Math.random() * 3, // 2-5 weeks
+        lead_time_std: 0.5 + Math.random() * 1, // 0.5-1.5 weeks std
+        on_time_prob: 0.7 + Math.random() * 0.25 // 70-95% on time
+      };
+    });
+
+    // Generate deliveries data (stochastic)
+    const deliveriesData = [];
+    for (let week = 1; week <= config.weeks - 5; week++) { // Stop 5 weeks before end
+      for (const supplier of suppliersData) {
+        if (Math.random() < 0.6) { // 60% chance of delivery each week
+          const leadTime = Math.max(1, Math.round(supplier.avg_lead_time_wk + 
+            (Math.random() - 0.5) * supplier.lead_time_std * 2));
+          const arrivalWeek = week + leadTime;
+          
+          if (arrivalWeek <= config.weeks) {
+            deliveriesData.push({
+              week_release: week,
+              week_arrival: arrivalWeek,
+              sku: supplier.sku,
+              qty: Math.round(200 + Math.random() * 800), // 200-1000 units
+              supplier_id: supplier.supplier_id
+            });
+          }
+        }
+      }
+    }
+
+    // Calculate baseline forecast performance
+    const calculateBaseline = () => {
+      const baselineForecasts = [];
+      const performanceMetrics = [];
+      
+      for (let week = 5; week <= config.weeks; week++) {
+        for (const sku of config.skus) {
+          for (const dc of config.dcs) {
+            // Get last 4 weeks of actuals
+            const lastFourWeeks = actualsData
+              .filter(d => d.week >= week - 4 && d.week < week && d.sku === sku && d.dc === dc)
+              .map(d => d.actual_qty);
+            
+            if (lastFourWeeks.length >= 4) {
+              const naiveBaseline = lastFourWeeks.reduce((a, b) => a + b, 0) / 4;
+              
+              // Add festival uplift if current week is festival
+              const isFestival = config.festivalWeeks.includes(week);
+              const festivalAdjusted = naiveBaseline * (isFestival ? 1.45 : 1); // 45% uplift
+              
+              const actualValue = actualsData.find(d => d.week === week && d.sku === sku && d.dc === dc)?.actual_qty || 0;
+              
+              baselineForecasts.push({
+                week,
+                sku,
+                dc,
+                naive_forecast: Math.round(naiveBaseline),
+                festival_adjusted_forecast: Math.round(festivalAdjusted),
+                actual: actualValue
+              });
+              
+              // Calculate errors
+              const naiveError = Math.abs(actualValue - naiveBaseline) / actualValue;
+              const festivalError = Math.abs(actualValue - festivalAdjusted) / actualValue;
+              
+              performanceMetrics.push({
+                week,
+                sku,
+                dc,
+                naive_mape: naiveError,
+                festival_mape: festivalError,
+                is_festival: isFestival
+              });
+            }
+          }
+        }
+      }
+      
+      return { baselineForecasts, performanceMetrics };
+    };
+
+    const { baselineForecasts, performanceMetrics } = calculateBaseline();
+
+    setGeneratedData({
+      forecast: forecastData,
+      actuals: actualsData,
+      inventory: inventoryData,
+      capacity: capacityData,
+      suppliers: suppliersData,
+      deliveries: deliveriesData,
+      baseline: baselineForecasts,
+      performance: performanceMetrics
+    });
+    
+    setIsGenerating(false);
+  };
+
+  const downloadCSV = (data, filename) => {
+    if (!data || data.length === 0) return;
+    
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => headers.map(header => row[header]).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const getChartData = () => {
+    if (!generatedData) return [];
+    
+    if (selectedChart === 'demand') {
+      // Aggregate demand by week for Mumbai vs Kolkata
+      const weeklyDemand = {};
+      generatedData.actuals.forEach(d => {
+        if (!weeklyDemand[d.week]) weeklyDemand[d.week] = { week: d.week, Mumbai: 0, Kolkata: 0 };
+        weeklyDemand[d.week][d.dc] += d.actual_qty;
+      });
+      return Object.values(weeklyDemand).slice(0, 52); // First year only for chart
+    } else if (selectedChart === 'performance') {
+      // MAPE by week
+      const weeklyMape = {};
+      generatedData.performance.forEach(d => {
+        if (!weeklyMape[d.week]) {
+          weeklyMape[d.week] = { 
+            week: d.week, 
+            naive_mape: [], 
+            festival_mape: [],
+            is_festival: d.is_festival
+          };
+        }
+        weeklyMape[d.week].naive_mape.push(d.naive_mape);
+        weeklyMape[d.week].festival_mape.push(d.festival_mape);
+      });
+      
+      return Object.values(weeklyMape).map(w => ({
+        week: w.week,
+        naive_mape: (w.naive_mape.reduce((a, b) => a + b, 0) / w.naive_mape.length * 100).toFixed(1),
+        festival_mape: (w.festival_mape.reduce((a, b) => a + b, 0) / w.festival_mape.length * 100).toFixed(1),
+        is_festival: w.is_festival
+      })).slice(4, 56); // Skip first 4 weeks, show first year
+    }
+    return [];
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+      <div className="bg-white rounded-lg shadow-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">FreshBites Supply Chain Data Generator</h1>
+            <p className="text-gray-600">Generate 2 years of synthetic data for supply planning & inventory optimization</p>
+          </div>
+          <button
+            onClick={generateData}
+            disabled={isGenerating}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Play size={20} />
+            {isGenerating ? 'Generating...' : 'Generate Data'}
+          </button>
+        </div>
+
+        {generatedData && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-blue-800">Dataset Summary</h3>
+                <p className="text-sm text-blue-600">
+                  • {generatedData.forecast.length.toLocaleString()} forecast records<br/>
+                  • {generatedData.actuals.length.toLocaleString()} actual demand records<br/>
+                  • {generatedData.deliveries.length} supplier deliveries<br/>
+                  • 5 SKUs × 2 DCs × 104 weeks
+                </p>
+              </div>
+              
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-green-800">Festival Impact</h3>
+                <p className="text-sm text-green-600">
+                  • 12 festival weeks per year<br/>
+                  • 40-50% demand uplift during festivals<br/>
+                  • Higher demand variance in Mumbai<br/>
+                  • More stable patterns in Kolkata
+                </p>
+              </div>
+              
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-purple-800">Supply Chain</h3>
+                <p className="text-sm text-purple-600">
+                  • Plant capacity: ~10K units/week<br/>
+                  • Supplier lead times: 2-5 weeks<br/>
+                  • On-time delivery: 70-95%<br/>
+                  • Initial inventory: Plant + 2 DCs
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <div className="flex gap-4 mb-4">
+                <button
+                  onClick={() => setSelectedChart('demand')}
+                  className={`px-4 py-2 rounded ${selectedChart === 'demand' ? 'bg-indigo-600 text-white' : 'bg-gray-200'}`}
+                >
+                  <BarChart3 className="inline mr-2" size={16} />
+                  Demand Patterns
+                </button>
+                <button
+                  onClick={() => setSelectedChart('performance')}
+                  className={`px-4 py-2 rounded ${selectedChart === 'performance' ? 'bg-indigo-600 text-white' : 'bg-gray-200'}`}
+                >
+                  <TrendingUp className="inline mr-2" size={16} />
+                  Forecast Performance
+                </button>
+              </div>
+
+              <div className="bg-white p-4 border rounded-lg" style={{ height: '400px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  {selectedChart === 'demand' ? (
+                    <LineChart data={getChartData()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="week" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="Mumbai" stroke="#ef4444" strokeWidth={2} />
+                      <Line type="monotone" dataKey="Kolkata" stroke="#3b82f6" strokeWidth={2} />
+                    </LineChart>
+                  ) : (
+                    <LineChart data={getChartData()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="week" />
+                      <YAxis />
+                      <Tooltip formatter={(value, name) => [`${value}%`, name === 'naive_mape' ? 'Naive MAPE' : 'Festival-Adjusted MAPE']} />
+                      <Legend />
+                      <Line type="monotone" dataKey="naive_mape" stroke="#ef4444" strokeWidth={2} name="Naive MAPE" />
+                      <Line type="monotone" dataKey="festival_mape" stroke="#10b981" strokeWidth={2} name="Festival-Adjusted MAPE" />
+                    </LineChart>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="border-t pt-6">
+              <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <Download size={20} />
+                Download Generated Data
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button
+                  onClick={() => downloadCSV(generatedData.forecast, 'forecast.csv')}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  📊 forecast.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.actuals, 'actuals.csv')}
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                >
+                  📈 actuals.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.inventory, 'inventory.csv')}
+                  className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                >
+                  📦 inventory.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.capacity, 'capacity.csv')}
+                  className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                >
+                  🏭 capacity.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.suppliers, 'suppliers.csv')}
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                >
+                  🚛 suppliers.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.deliveries, 'deliveries.csv')}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                >
+                  📋 deliveries.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.baseline, 'baseline_forecast.csv')}
+                  className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700"
+                >
+                  🎯 baseline.csv
+                </button>
+                <button
+                  onClick={() => downloadCSV(generatedData.performance, 'performance.csv')}
+                  className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700"
+                >
+                  📊 performance.csv
+                </button>
+              </div>
+              
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold mb-2">Key Insights from Generated Data:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <strong>Mumbai Market:</strong>
+                    <ul className="list-disc list-inside text-gray-600">
+                      <li>Higher demand variance (+30% vs Kolkata)</li>
+                      <li>More stockouts expected during festivals</li>
+                      <li>Requires dynamic safety stock</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>Kolkata Market:</strong>
+                    <ul className="list-disc list-inside text-gray-600">
+                      <li>More stable demand patterns</li>
+                      <li>Tendency for excess inventory</li>
+                      <li>Better forecast accuracy</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default FreshBitesDataGenerator;

@@ -212,8 +212,12 @@ app.listen(PORT, () => {
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const feedbackFile = path.join(process.cwd(), "Dataset", "baseline_forecast.csv");
+// This will work locally AND on Render
+const feedbackFile = path.join(__dirname, "Dataset", "baseline_forecast.csv");
 app.post("/api/feedback", async (req, res) => {
   try {
     const {

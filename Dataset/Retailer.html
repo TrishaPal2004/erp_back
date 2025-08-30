@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Retailer Stock Update</title>
+</head>
+<body>
+  <h2>Update Product Stock</h2>
+
+  <form id="stockForm">
+    <!-- Product Name -->
+    <label>Product:</label>
+    <input type="text" id="product" placeholder="Enter product name" required>
+    <br><br>
+
+    <!-- Status Options -->
+    <label>Status:</label>
+    <select id="status">
+      <option value="shortage">Shortage</option>
+      <option value="abundance">Abundance</option>
+    </select>
+    <br><br>
+
+    <!-- Placeholder for extra info -->
+    <label> Quantity:</label>
+    <input type="text" id="notes" placeholder="e.g. 20 pieces left or Extra stock">
+    <br><br>
+
+    <button type="submit">Update</button>
+  </form>
+
+  <h3>Dashboard</h3>
+  <ul id="dashboard"></ul>
+
+  <script>
+    const form = document.getElementById("stockForm");
+    const dashboard = document.getElementById("dashboard");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const product = document.getElementById("product").value;
+      const status = document.getElementById("status").value;
+      const notes = document.getElementById("notes").value;
+
+      // Show on dashboard
+      const li = document.createElement("li");
+      li.textContent = `${product} → ${status} (${notes || "No extra info"})`;
+      dashboard.appendChild(li);
+
+      form.reset();
+    });
+  </script>
+</body>
+</html>
