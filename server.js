@@ -237,8 +237,7 @@ app.post("/api/feedback", async (req, res) => {
     let naive_forecast = 0;
     let festival_adjusted_forecast = 0;
     let sku = "";
-    let currentWeek =  new Date().getWeek; // Replace with real current week logic
-
+    let currentWeek = Math.ceil((((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 86400000) + new Date(new Date().getFullYear(), 0, 1).getDay() + 1) / 7);
     // Map product → sku & naive_forecast
     if (product === "Cheese") {
       naive_forecast = cheeseDemand;
