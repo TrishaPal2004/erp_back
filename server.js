@@ -211,22 +211,93 @@ app.listen(PORT, () => {
   console.log('- DB_PASSWORD:', process.env.DB_PASSWORD);
 });
 
+import fs from "fs";
+import path from "path";
+
+const feedbackFile = path.resolve(
+  "C:/Users/trish/OneDrive/Documents/Cognizant2/Dataset/baseline_forecast.csv"
+);
+
 app.post("/api/feedback", async (req, res) => {
   try {
-    const { product, stockStatus, value } = req.body;
-    console.log('Received feedback:', req.body);    
-    // Here you would typically store the feedback in a database
-    // For this example, we'll just log it and return a success response
+    const {
+      cheeseDemand,
+      snacksDemand,
+      bakeryDemand,
+      beveragesDemand,
+      frozenDemand,
+      product,
+      stockStatus,
+      value,
+    } = req.body;
+
+    console.log("📩 Received feedback:", req.body);
+
+    let naive_forecast = 0;
+    let festival_adjusted_forecast = 0;
+    let sku = "";
+    let dc = retailerId; // You might want to store retailerId as dc
+    let currentWeek =  new Date().getWeek; // Replace with real current week logic
+
+    // Map product → sku & naive_forecast
+    if (product === "Cheese") {
+      naive_forecast = cheeseDemand;
+      sku = "SKU003_Cheese";
+    } else if (product === "Snacks") {
+      naive_forecast = snacksDemand;
+      sku = "SKU001_Snacks";
+    } else if (product === "Bakery") {
+      naive_forecast = bakeryDemand;
+      sku = "SKU004_Bakery";
+    } else if (product === "Beverages") {
+      naive_forecast = beveragesDemand;
+      sku = "SKU002_Beverages";
+    } else if (product === "Frozen") {
+      naive_forecast = frozenDemand;
+      sku = "SKU005_Frozen";
+    }
+
+    // Adjust forecast based on stock status
+    if (stockStatus === "Overstock") {
+      festival_adjusted_forecast = naive_forecast - value;
+    } else if (stockStatus === "Understock") {
+      festival_adjusted_forecast = naive_forecast + value;
+    } else {
+      festival_adjusted_forecast = naive_forecast;
+    }
+
+    const actual = naive_forecast + value;
+
+    // Prepare CSV row AFTER calculations
+    const row = [
+      currentWeek,
+      sku,
+      dc,
+      naive_forecast,
+      festival_adjusted_forecast,
+      actual,
+    ].join(",") + "\n";
+
+    // If file doesn’t exist, write header first
+    if (!fs.existsSync(feedbackFile)) {
+      const header =
+        "currentWeek,sku,dc,naive_forecast,festival_adjusted_forecast,actual\n";
+      fs.writeFileSync(feedbackFile, header);
+    }
+
+    // Append row
+    fs.appendFileSync(feedbackFile, row);
+
     res.json({
       success: true,
-      message: 'Feedback received successfully',
-      feedback: { product, stockStatus, value }
+      message: "Feedback saved to CSV",
+      feedback: req.body,
     });
   } catch (err) {
-    console.error('Feedback submission error:', err.message);
+    console.error("❌ Feedback submission error:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: "Internal server error",
     });
   }
 });
