@@ -225,6 +225,7 @@ app.post("/api/feedback", async (req, res) => {
       bakeryDemand,
       beveragesDemand,
       frozenDemand,
+      dc,
       product,
       stockStatus,
       value,
@@ -235,7 +236,6 @@ app.post("/api/feedback", async (req, res) => {
     let naive_forecast = 0;
     let festival_adjusted_forecast = 0;
     let sku = "";
-    let dc = retailerId; // You might want to store retailerId as dc
     let currentWeek =  new Date().getWeek; // Replace with real current week logic
 
     // Map product → sku & naive_forecast
