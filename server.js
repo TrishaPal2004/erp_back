@@ -213,10 +213,7 @@ app.listen(PORT, () => {
 import fs from "fs";
 import path from "path";
 
-const feedbackFile = path.resolve(
-  "C:/Users/trish/OneDrive/Documents/Cognizant2/Dataset/baseline_forecast.csv"
-);
-
+const feedbackFile = path.join(process.cwd(), "Dataset", "baseline_forecast.csv");
 app.post("/api/feedback", async (req, res) => {
   try {
     const {
